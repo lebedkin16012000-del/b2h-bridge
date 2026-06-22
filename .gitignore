@@ -1,0 +1,40 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Blender temporary and backup files
+*.blend1
+*.blend2
+*.blend@
+*.blend~
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local editor settings
+.vscode/
+.idea/
+*.code-workspace
+
+# Generated B2H exports and diagnostics
+textures/
+materialx/
+*_bridge.json
+*_material_manifest.json
+*_assignment_debug.json
+*_bake_report.txt
+*_export_report.txt
+COPY_THIS_TO_HOUDINI.txt
+import_to_houdini.py
+UDIM_INFO.txt
+*.usd
+*.usda
+*.usdc
+*.mtlx
+
+# Logs and release artifacts
+*.log
+*.zip
