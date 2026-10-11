@@ -1,0 +1,112 @@
+{
+  "name": "B2H Model Import",
+  "version": "0.5.0",
+  "manifest_schema": 1,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "size": 130,
+      "sha256": "beb6cf7c88552821e943d1671cb676eebe78e502f86e7eb731a2b6c1a0f5dd4e"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "size": 932,
+      "sha256": "f010a35d6d12a229626029494ce81c7ebe254a14a80c7bf95161084e4cbd84d0"
+    },
+    {
+      "path": ".gitignore",
+      "size": 86,
+      "sha256": "4953bfbcbc985110e4ad97425f74f157807ecbb9cf96430f759d9ee5aa850cd0"
+    },
+    {
+      "path": "B2H_Model_Import.package.example.json",
+      "size": 198,
+      "sha256": "5da2f2150ac8b6b5f91dea7ddeb469760fcab00d34f5a3ed632cbec15e0d5fa0"
+    },
+    {
+      "path": "B2H_Model_Import/b2h_asset_library.pypanel",
+      "size": 753,
+      "sha256": "1065180837be5c7185b29d061b4f025a97b77bf16b0a5710acbd3a12970dce9a"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_asset_library_ui.py",
+      "size": 11146,
+      "sha256": "ec18d28dc2c9d4ffe16dcae455a54c7ebcad47b67a9853c67b55aedbfe4ea579"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_importer.py",
+      "size": 14611,
+      "sha256": "d199d6a67b3fd62401142b75899c81a6dfcaf78f3ad8108772d6594140ca7f21"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_library.py",
+      "size": 4157,
+      "sha256": "67e4478e7e1887d7cf54de34176995b69715320183805645c37cbbdf47139153"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_manifest.py",
+      "size": 9651,
+      "sha256": "d83e8138e940192245939453ac830edbbd9d0d9af36808decef4dd61f01e1817"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_materials.py",
+      "size": 11597,
+      "sha256": "f650c9c2a7eb4d1bc9aba072c54430d6d88deebb263a0681c446ada44c25b1ab"
+    },
+    {
+      "path": "B2H_Model_Import/python/b2h_settings.py",
+      "size": 1873,
+      "sha256": "4eb77b251b61410e8ffc5a5c6d6b539e8f1f2985b44a83c2831c8f94348fa25e"
+    },
+    {
+      "path": "B2H_Model_Import/python/settings.json",
+      "size": 71,
+      "sha256": "9decaf25679d836f35466450a0e494b2dcdf821646f376882888bbb906c53186"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "size": 1331,
+      "sha256": "6ed714467d17998d1f0fb6929e1f0916c51876be55e3179fbd281f63a3c46ae1"
+    },
+    {
+      "path": "install_windows.bat",
+      "size": 214,
+      "sha256": "4716bd607aa5179597886d5b3bec6d80a2f212c96036aadb866d72dba27e3c47"
+    },
+    {
+      "path": "install_windows.ps1",
+      "size": 6052,
+      "sha256": "4d5a98aa6d13a904c255d84410a718379dbc94ca26a5536255a0fbf9d84f56f0"
+    },
+    {
+      "path": "LICENSE",
+      "size": 1065,
+      "sha256": "20bdd7fb14aa107edb9a377ab10cc32520a64b2a6e5f7e25fa89ef579746429c"
+    },
+    {
+      "path": "README_RU.md",
+      "size": 3802,
+      "sha256": "6906458dd717b158cf63ae993d797ec4c8d38f689f99bc788b1bf4f760115914"
+    },
+    {
+      "path": "README.md",
+      "size": 1994,
+      "sha256": "b84d0cc1d438ee252d3b7cd1e696edfe501645219f86765f36acc173b5ca25e3"
+    },
+    {
+      "path": "RELEASE_NOTES_RU.md",
+      "size": 1251,
+      "sha256": "8d46ca03e006b79a6afe553efd26e26f6881f9e6b9bfe8a438d19b4a66cf481e"
+    },
+    {
+      "path": "tests/test_houdini_import.py",
+      "size": 3566,
+      "sha256": "dc02f37295e00ea7bf0ebe1cd642aa380fa35e631371005a45274f36e9bcab72"
+    },
+    {
+      "path": "VERSION",
+      "size": 6,
+      "sha256": "a0ad50640139a524f86591157145bf1d4674ea9c065bfea21558f0f7b04430c8"
+    }
+  ]
+}

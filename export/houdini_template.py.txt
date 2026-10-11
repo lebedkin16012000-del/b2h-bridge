@@ -1,0 +1,707 @@
+
+import hou, os, json, re, traceback
+try:
+    import voptoolutils
+except Exception:
+    voptoolutils = None
+BASE_DIR = r"__BASE_DIR__".replace("\\", "/")
+ASSET_NAME = "__ASSET_NAME__"
+META_PATH = os.path.join(BASE_DIR, ASSET_NAME + "_bridge.json").replace("\\", "/")
+with open(META_PATH, "r", encoding="utf-8") as f:
+    META = json.load(f)
+
+def clean_path(path):
+    if not path:
+        return None
+    return str(path).replace(chr(92), "/")
+
+def resolve_asset_path(path, *fallback_names):
+    raw = clean_path(path)
+    candidates = []
+    if raw:
+        if os.path.isabs(raw):
+            candidates.append(raw)
+        else:
+            candidates.append(clean_path(os.path.join(BASE_DIR, raw)))
+        candidates.append(clean_path(os.path.join(BASE_DIR, os.path.basename(raw))))
+    for fallback in fallback_names:
+        if fallback:
+            candidates.append(clean_path(os.path.join(BASE_DIR, fallback)))
+    seen = set()
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            if os.path.exists(candidate):
+                return candidate
+    return candidates[0] if candidates else raw
+
+
+def resolve_texture_path(path):
+    resolved = resolve_asset_path(path)
+    if resolved and os.path.exists(resolved):
+        return resolved
+    raw = clean_path(path)
+    if raw:
+        return clean_path(os.path.join(BASE_DIR, "textures", os.path.basename(raw)))
+    return resolved
+
+USD_PATH = resolve_asset_path(META.get("usd_path"), ASSET_NAME + ".usdc", ASSET_NAME + ".usd")
+MATERIALX_DIR = resolve_asset_path(META.get("materialx_dir"), "materialx")
+MATERIALS = META.get("materials", {})
+ASSIGNMENTS = META.get("assignments", [])
+AXIS_FIX_ENABLED = bool(META.get("axis_fix_enabled", True))
+AXIS_ROTATE_X = float(META.get("axis_rotate_x", -90.0))
+UI_SAFE_MODE = bool(META.get("houdini_ui_safe_mode", False))
+
+DIAGNOSTICS = {
+    "geometry_ok": False,
+    "expected_materials": len(MATERIALS),
+    "created_materials": 0,
+    "failed_materials": [],
+    "expected_assignments": len(ASSIGNMENTS),
+    "created_assignments": 0,
+    "missing_textures": [],
+    "warnings": [],
+    "errors": [],
+}
+
+def add_warning(message):
+    message = str(message)
+    DIAGNOSTICS["warnings"].append(message)
+    print("[B2H] WARNING:", message)
+
+def add_error(message):
+    message = str(message)
+    DIAGNOSTICS["errors"].append(message)
+    print("[B2H] ERROR:", message)
+
+def print_import_summary(status):
+    print("====================================")
+    print("B2H IMPORT STATUS:", status)
+    print("Geometry:", "OK" if DIAGNOSTICS["geometry_ok"] else "FAILED")
+    print("Materials: %d/%d" % (DIAGNOSTICS["created_materials"], DIAGNOSTICS["expected_materials"]))
+    print("Assignments: %d/%d" % (DIAGNOSTICS["created_assignments"], DIAGNOSTICS["expected_assignments"]))
+    print("Missing textures:", len(DIAGNOSTICS["missing_textures"]))
+    if DIAGNOSTICS["failed_materials"]:
+        print("Failed materials:", ", ".join(DIAGNOSTICS["failed_materials"]))
+    for message in DIAGNOSTICS["warnings"]:
+        print("WARNING:", message)
+    for message in DIAGNOSTICS["errors"]:
+        print("ERROR:", message)
+    print("====================================")
+
+def import_result_status(diagnostics):
+    complete_failure = (
+        not diagnostics["geometry_ok"] or
+        (diagnostics["expected_materials"] > 0 and diagnostics["created_materials"] == 0) or
+        (diagnostics["expected_assignments"] > 0 and diagnostics["created_assignments"] == 0)
+    )
+    incomplete = (
+        diagnostics["created_materials"] != diagnostics["expected_materials"] or
+        diagnostics["created_assignments"] != diagnostics["expected_assignments"] or
+        bool(diagnostics["missing_textures"]) or
+        bool(diagnostics["warnings"]) or
+        bool(diagnostics["errors"])
+    )
+    return "FAILED" if complete_failure else ("SUCCESS WITH WARNINGS" if incomplete else "SUCCESS")
+
+def safe_name(name):
+    name = str(name or "item").strip().replace(" ", "_")
+    name = re.sub(r"[^A-Za-z0-9_]+", "_", name)
+    name = re.sub(r"_+", "_", name).strip("_")
+    if not name: name = "item"
+    if name[0].isdigit(): name = "_" + name
+    return name
+
+def unique_child(parent, base):
+    base = safe_name(base)
+    if parent.node(base) is None: return base
+    i = 1
+    while parent.node("%s_%03d" % (base, i)) is not None: i += 1
+    return "%s_%03d" % (base, i)
+
+def setparm(node, name, value):
+    p = node.parm(name) if node else None
+    if p:
+        try: p.set(value); return True
+        except Exception: pass
+    return False
+
+def settuple(node, names, values):
+    if not node: return False
+    for name in names:
+        p = node.parmTuple(name)
+        if p:
+            try: p.set(tuple(values)); return True
+            except Exception: pass
+    return False
+
+def configure_usdimport(node):
+    """Set USD Import options by UI label as well as known parm names."""
+    for parm in node.parms():
+        try:
+            template = parm.parmTemplate()
+            label = template.label().strip().lower()
+            if label == "unpack":
+                parm.set(1)
+            elif label in {"load as", "geometry type", "import type"}:
+                labels = list(template.menuLabels())
+                items = list(template.menuItems())
+                for index, menu_label in enumerate(labels):
+                    if str(menu_label).strip().lower() == "polygons":
+                        parm.set(items[index] if index < len(items) else index)
+                        break
+        except Exception:
+            pass
+def make(parent, nodetype, name):
+    try: return parent.createNode(nodetype, unique_child(parent, name))
+    except Exception: return None
+
+def stage_root():
+    return hou.node("/stage") or hou.node("/").createNode("lopnet", "stage")
+
+def tag_generated(node, role):
+    try:
+        node.setUserData("b2h_asset", ASSET_NAME)
+        node.setUserData("b2h_role", role)
+    except Exception:
+        pass
+    return node
+
+def remove_previous_bridge_nodes(stage):
+    """Make re-import idempotent while touching only B2H-owned asset nodes."""
+    root = safe_name(ASSET_NAME)
+    roles = [
+        (root + "_ASSIGN_MATERIALS", "assign"),
+        (root + "_MATERIAL_LIBRARY", "materials"),
+        (root + "_SOP_CREATE_EDITABLE", "geometry"),
+    ]
+    removed = 0
+    for base, role in roles:
+        pattern = re.compile(r"^" + re.escape(base) + r"(?:_[0-9]{3})?$")
+        for node in list(stage.children()):
+            try:
+                tagged = node.userData("b2h_asset") == ASSET_NAME and node.userData("b2h_role") == role
+                legacy = bool(pattern.match(node.name()))
+                if tagged or legacy:
+                    node.destroy(); removed += 1
+            except Exception:
+                pass
+    if removed:
+        print("[B2H] Replaced previous generated nodes:", removed)
+
+def create_editable_import(stage):
+    base = safe_name(ASSET_NAME)
+    sopcreate = tag_generated(stage.createNode("sopcreate", unique_child(stage, base + "_SOP_CREATE_EDITABLE")), "geometry")
+    sopnet = sopcreate.node("sopnet") or sopcreate.createNode("sopnet", "sopnet")
+    create = sopnet.node("create") or sopnet.createNode("geo", "create")
+
+    for c in create.children():
+        try: c.destroy()
+        except Exception: pass
+
+    usd = create.createNode("usdimport", "usdimport1")
+    for parm in ["filepath1", "filepath", "file", "usdfile"]: setparm(usd, parm, USD_PATH)
+
+    # Do not scan every parameter: on Houdini 21 that can leave the UI event
+    # queue busy before the Material Library and its builders are created.
+    for parm_name in ["unpack", "unpackusd", "unpackgeometry", "importasgeometry"]:
+        setparm(usd, parm_name, 1)
+    for parm_name, value in [("geotype", "polygons"), ("geometrytype", "polygons"), ("primtype", "polygon")]:
+        setparm(usd, parm_name, value)
+    configure_usdimport(usd)
+
+    last = usd
+    if AXIS_FIX_ENABLED:
+        xform = create.createNode("xform", "AXIS_FIX_X")
+        xform.setInput(0, usd)
+        if not settuple(xform, ["r", "rot", "rotate"], [AXIS_ROTATE_X, 0, 0]): setparm(xform, "rx", AXIS_ROTATE_X)
+        last = xform
+
+    out = create.createNode("null", "OUT_EDITABLE_USD")
+    out.setInput(0, last); out.setDisplayFlag(True); out.setRenderFlag(True)
+    if True:
+        try: create.layoutChildren()
+        except Exception: pass
+    return sopcreate
+
+def find_surface(builder):
+    for c in builder.children():
+        if c.type().name() == "mtlxstandard_surface": return c
+    return None
+
+def input_index_by_names(node, names):
+    if not node:
+        return None
+
+    names = [str(x).lower() for x in names]
+
+    try:
+        input_names = list(node.inputNames())
+    except Exception:
+        input_names = []
+
+    for i, n in enumerate(input_names):
+        low = str(n).lower()
+        if low in names:
+            return i
+
+    for i, n in enumerate(input_names):
+        low = str(n).lower()
+        for wanted in names:
+            if wanted in low or low in wanted:
+                return i
+
+    # Houdini 21 MaterialX standard_surface common fallback indices.
+    fallback = {
+        "base_color": 1,
+        "basecolor": 1,
+        "specular_roughness": 9,
+        "metalness": 3,
+        "opacity": 38,
+        "emission_color": 36,
+        "normal": 40,
+    }
+
+    for wanted in names:
+        if wanted in fallback:
+            return fallback[wanted]
+
+    return None
+
+def connect_mtlx(builder, surface, input_name, node):
+    if not surface or not node:
+        return False
+
+    aliases = {
+        "base_color": ["base_color", "base", "basecolor"],
+        "specular_roughness": ["specular_roughness", "roughness"],
+        "metalness": ["metalness", "metallic"],
+        "opacity": ["opacity", "alpha"],
+        "emission_color": ["emission_color", "emission"],
+        "normal": ["normal"],
+    }
+
+    names = aliases.get(input_name, [input_name])
+
+    for n in names:
+        try:
+            surface.setNamedInput(n, node, 0)
+            return True
+        except Exception:
+            pass
+
+    # Robust fallback by input name.
+    try:
+        input_names = list(surface.inputNames())
+    except Exception:
+        input_names = []
+
+    for wanted in names:
+        for idx, inp_name in enumerate(input_names):
+            if str(inp_name).lower() == wanted.lower():
+                try:
+                    surface.setInput(idx, node, 0)
+                    return True
+                except Exception:
+                    pass
+
+    # Last fallback for Houdini 21 MaterialX standard surface.
+    fallback = {
+        "base_color": 1,
+        "metalness": 3,
+        "specular_roughness": 9,
+        "opacity": 38,
+        "emission_color": 36,
+        "normal": 40,
+    }
+
+    if input_name in fallback:
+        try:
+            surface.setInput(fallback[input_name], node, 0)
+            return True
+        except Exception:
+            pass
+
+    print("CONNECT FAILED:", input_name, "->", surface.path())
+    return False
+
+def apply_defaults(surface, data):
+    d = data.get("defaults", {}); hints = data.get("hints", {})
+    color = d.get("base_color", [0.5,0.5,0.5,1])
+    if isinstance(color, list) and len(color) >= 3: settuple(surface, ["base_color", "basecolor"], color[:3])
+    setparm(surface, "specular_roughness", float(d.get("roughness", 0.55)))
+    setparm(surface, "metalness", float(d.get("metallic", 0.0)))
+    setparm(surface, "ior", float(d.get("ior", 1.45)))
+    setparm(surface, "transmission", float(d.get("transmission", 0.0)))
+    setparm(surface, "transmission_weight", float(d.get("transmission", 0.0)))
+    settuple(surface, ["opacity"], [float(d.get("alpha", 1.0))] * 3)
+    if hints.get("metal"):
+        setparm(surface, "metalness", 1.0); setparm(surface, "specular", 1.0)
+    if hints.get("glass"):
+        setparm(surface, "opacity", 1.0); setparm(surface, "thin_walled", 0); setparm(surface, "transmission", 1.0); setparm(surface, "transmission_weight", 1.0); setparm(surface, "specular_roughness", 0.02)
+    if hints.get("foliage") or hints.get("alpha"):
+        setparm(surface, "thin_walled", 1); setparm(surface, "metalness", 0.0)
+
+def create_karmamtlx_builder(matlib, name):
+    if voptoolutils:
+        masks = []
+        if hasattr(voptoolutils, "KARMAMTLX_TAB_MASK"):
+            masks.append(voptoolutils.KARMAMTLX_TAB_MASK)
+        if hasattr(voptoolutils, "KARMA"):
+            masks.append(voptoolutils.KARMA)
+
+        for mask in masks:
+            try:
+                return voptoolutils._setupMtlXBuilderSubnet(
+                    destination_node=matlib,
+                    name=unique_child(matlib, name),
+                    mask=mask,
+                    folder_label="Karma Material Builder"
+                )
+            except TypeError:
+                try:
+                    return voptoolutils._setupMtlXBuilderSubnet(
+                        destination_node=matlib,
+                        name=unique_child(matlib, name),
+                        mask=mask
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+    builder = matlib.createNode("subnet", unique_child(matlib, name))
+    try:
+        builder.setMaterialFlag(True)
+    except Exception:
+        pass
+
+    try:
+        builder.createNode("subinput", "inputs")
+    except Exception:
+        pass
+
+    surface = builder.createNode("mtlxstandard_surface", "mtlxstandard_surface")
+
+    try:
+        disp = builder.createNode("mtlxdisplacement", "mtlxdisplacement")
+    except Exception:
+        disp = None
+
+    try:
+        props = builder.createNode("kma_material_properties", "material_properties")
+    except Exception:
+        props = None
+
+    try:
+        out = builder.createNode("suboutput", "Material_Outputs_and_AOVs")
+        out.setInput(0, surface, 0)
+        if disp:
+            try:
+                out.setInput(1, disp, 0)
+            except Exception:
+                pass
+        if props:
+            try:
+                out.setInput(2, props, 0)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return builder
+
+def ensure_material_outputs(builder, surface):
+    # Houdini 21 can create a builder whose Material Outputs node is not wired
+    # when the subnet was created from Python.  Wire it explicitly so the
+    # builder remains a valid Karma MaterialX material.
+    if not builder or not surface:
+        return False
+    outputs = []
+    for child in builder.children():
+        try:
+            if child.type().name() in {"suboutput", "subnetconnector"} or "output" in child.name().lower() or "aov" in child.name().lower():
+                outputs.append(child)
+        except Exception:
+            pass
+    if not outputs:
+        try:
+            outputs.append(builder.createNode("suboutput", "Material_Outputs_and_AOVs"))
+        except Exception:
+            return False
+    for output in outputs:
+        try:
+            output.setInput(0, surface, 0)
+            return True
+        except Exception:
+            try:
+                output.setNamedInput("surface", surface, 0)
+                return True
+            except Exception:
+                pass
+    return False
+
+def build_material(matlib, data):
+    name = safe_name(data.get("name", "Material"))
+    builder = create_karmamtlx_builder(matlib, name)
+    if not builder:
+        raise RuntimeError("Could not create MaterialX builder")
+
+    try:
+        surface = find_surface(builder)
+        if not surface:
+            surface = make(builder, "mtlxstandard_surface", "mtlxstandard_surface")
+        if not surface:
+            raise RuntimeError("Could not create MaterialX standard_surface")
+
+        apply_defaults(surface, data)
+
+        parameter_node = make(builder, "parameter", "uv_tiling")
+        if parameter_node:
+            try:
+                p0 = surface.position()
+                parameter_node.setPosition(hou.Vector2(p0[0] - 11, p0[1]))
+            except Exception:
+                pass
+            setparm(parameter_node, "parmscope", "subnet")
+            setparm(parameter_node, "floatdef", 1.0)
+            setparm(parameter_node, "rangeflt1", 0.0)
+            setparm(parameter_node, "rangeflt2", 10.0)
+
+        tex = data.get("textures", {})
+        image_nodes = {}
+
+        texture_map = {
+        "basecolor": ("base_color", "color3"),
+        "roughness": ("specular_roughness", "float"),
+        "metallic": ("metalness", "float"),
+        "opacity": ("opacity", "float"),
+        "emission": ("emission_color", "color3"),
+        "normal": ("normal", "vector3"),
+        "ior": ("specular_IOR", "float"),
+        "transmission": ("transmission", "float"),
+        }
+
+        try:
+            p0 = surface.position()
+            y = p0[1]
+        except Exception:
+            y = 0
+
+        for role, (surface_input, signature) in texture_map.items():
+            source_path = tex.get(role)
+            if not source_path:
+                continue
+            path = resolve_texture_path(source_path)
+            if not path or not os.path.exists(path):
+                DIAGNOSTICS["missing_textures"].append({"material": name, "role": role, "path": source_path})
+                add_warning('Material "%s": %s texture is missing: %s' % (name, role, source_path))
+                continue
+
+            img = make(builder, "mtlxtiledimage", "image_" + role)
+            if not img:
+                img = make(builder, "mtlximage", "image_" + role)
+            if not img:
+                raise RuntimeError("Could not create image node for %s" % role)
+
+            try:
+                img.setPosition(hou.Vector2(surface.position()[0] - 8, y))
+                y -= 2.4
+            except Exception:
+                pass
+
+            if not setparm(img, "file", path):
+                raise RuntimeError("Could not set texture path for %s" % role)
+            setparm(img, "signature", signature)
+            if role in {"normal", "roughness", "metallic", "opacity", "emission", "ior", "transmission"}:
+                for parm_name in ("filecolorspace", "colorspace", "color_space"):
+                    setparm(img, parm_name, "raw")
+            if parameter_node:
+                try:
+                    img.setInput(3, parameter_node, 0)
+                except Exception:
+                    pass
+
+            image_nodes[role] = img
+
+        if "basecolor" in image_nodes and not data.get("metal_basecolor_ignored", False):
+            if not connect_mtlx(builder, surface, "base_color", image_nodes["basecolor"]):
+                raise RuntimeError("Could not connect basecolor")
+
+        if data.get("metal_basecolor_ignored", False) and "basecolor" in image_nodes:
+            try:
+                image_nodes["basecolor"].destroy()
+                del image_nodes["basecolor"]
+            except Exception:
+                pass
+
+        for role, surface_input in (("roughness", "specular_roughness"),
+                                    ("metallic", "metalness"),
+                                    ("opacity", "opacity"),
+                                    ("emission", "emission_color"),
+                                    ("ior", "specular_IOR"),
+                                    ("transmission", "transmission")):
+            if role in image_nodes and not connect_mtlx(builder, surface, surface_input, image_nodes[role]):
+                raise RuntimeError("Could not connect %s" % role)
+
+        if "opacity" in image_nodes:
+            setparm(surface, "thin_walled", 1)
+            setparm(surface, "opacity_threshold", 0.35)
+
+        if "emission" in image_nodes:
+            setparm(surface, "emission", max(float(data.get("defaults", {}).get("emission_strength", 1.0)), 0.5))
+
+        if "transmission" in image_nodes:
+            # Some Houdini builds expose the same input under this alias.
+            connect_mtlx(builder, surface, "transmission_weight", image_nodes["transmission"])
+
+        if "normal" in image_nodes:
+            nmap = make(builder, "mtlxnormalmap", "normal_converter")
+            if not nmap:
+                raise RuntimeError("Could not create normalmap node")
+            try:
+                nmap.setPosition(hou.Vector2(image_nodes["normal"].position()[0] + 2, image_nodes["normal"].position()[1]))
+            except Exception:
+                pass
+            try:
+                nmap.setInput(0, image_nodes["normal"], 0)
+            except Exception as error:
+                raise RuntimeError("Could not connect normal texture to normalmap: %s" % error)
+            for parm_name in ("space", "normalspace", "tangentspace"):
+                setparm(nmap, parm_name, "tangent")
+            if not connect_mtlx(builder, surface, "normal", nmap):
+                raise RuntimeError("Could not connect normal")
+
+        if not ensure_material_outputs(builder, surface):
+            raise RuntimeError("Could not connect MaterialX surface output")
+        try: builder.layoutChildren()
+        except Exception: pass
+        return builder
+    except Exception:
+        try: builder.destroy()
+        except Exception: pass
+        raise
+
+summary_printed = False
+try:
+    stage = stage_root()
+    remove_previous_bridge_nodes(stage)
+    sopcreate = create_editable_import(stage)
+    DIAGNOSTICS["geometry_ok"] = True
+
+    matlib = tag_generated(stage.createNode("materiallibrary", unique_child(stage, safe_name(ASSET_NAME) + "_MATERIAL_LIBRARY")), "materials")
+    matlib.setInput(0, sopcreate)
+    setparm(matlib, "matpathprefix", "/materials/")
+    created = {}
+    for mat_name, data in MATERIALS.items():
+        try:
+            builder = build_material(matlib, data)
+            safe_material_name = safe_name(data.get("name", mat_name))
+            created[safe_material_name] = builder.name()
+            DIAGNOSTICS["created_materials"] += 1
+            print("[B2H] CREATED MATERIAL:", builder.name())
+        except Exception as error:
+            DIAGNOSTICS["failed_materials"].append(str(mat_name))
+            add_error('Material "%s" failed: %s' % (mat_name, error))
+            traceback.print_exc()
+    try:
+        matlib.layoutChildren()
+    except Exception:
+        pass
+
+    assign = tag_generated(stage.createNode("assignmaterial", unique_child(stage, safe_name(ASSET_NAME) + "_ASSIGN_MATERIALS")), "assign")
+    assign.setInput(0, matlib)
+    resolved_assignments = []
+    for item in ASSIGNMENTS:
+        obj = item.get("safe_object_name") or safe_name(item.get("object_name", ""))
+        target = None
+
+        material_candidates = []
+        if item.get("bth_material"):
+            material_candidates.append(item.get("bth_material"))
+        material_candidates.extend(item.get("materials", []))
+
+        for material_name in material_candidates:
+            safe_material_name = safe_name(material_name)
+            if safe_material_name in created:
+                target = created[safe_material_name]
+                break
+
+        if not target:
+            add_error('Assignment for object "%s" has no successfully created material' % obj)
+            continue
+
+        patterns = ["/**/*%s*" % obj]
+        for material_name in material_candidates:
+            safe_material_name = safe_name(material_name)
+            patterns.append("/**/*%s*" % safe_material_name)
+            patterns.append("/**/*__%s*" % safe_material_name)
+        resolved_assignments.append({
+            "object": obj,
+            "target": "/materials/%s" % target,
+            "patterns": list(dict.fromkeys(patterns)),
+        })
+
+    # Backward compatibility for very old single-material manifests only.
+    # Never hide a missing multi-material assignment by painting everything
+    # with the first material.
+    if not ASSIGNMENTS and len(created) == 1:
+        add_warning("Manifest has no assignments; using legacy single-material fallback")
+        DIAGNOSTICS["expected_assignments"] = 1
+        resolved_assignments.append({
+            "object": "<legacy all prims>",
+            "target": "/materials/%s" % next(iter(created.values())),
+            "patterns": ["/**"],
+        })
+    elif not ASSIGNMENTS and len(created) > 1:
+        DIAGNOSTICS["expected_assignments"] = len(created)
+        add_error("Manifest has no assignments for a multi-material asset; no fallback was applied")
+
+    entries = [
+        (assignment_index, pattern, assignment["target"])
+        for assignment_index, assignment in enumerate(resolved_assignments)
+        for pattern in assignment["patterns"]
+    ]
+    if not setparm(assign, "nummaterials", len(entries)):
+        raise RuntimeError("Could not configure Assign Material entry count")
+
+    assignment_results = [True] * len(resolved_assignments)
+    for entry_index, (assignment_index, pattern, material_path) in enumerate(entries, start=1):
+        pattern_ok = setparm(assign, "primpattern%d" % entry_index, pattern)
+        material_ok = setparm(assign, "matspecpath%d" % entry_index, material_path)
+        if not (pattern_ok and material_ok):
+            assignment_results[assignment_index] = False
+
+    for assignment, succeeded in zip(resolved_assignments, assignment_results):
+        if succeeded:
+            DIAGNOSTICS["created_assignments"] += 1
+        else:
+            add_error('Could not configure assignment for object "%s"' % assignment["object"])
+
+    assign.setDisplayFlag(True)
+    # Arrange only nodes created by this bridge. Existing /stage networks stay untouched.
+    try:
+        stage.layoutChildren(items=[sopcreate, matlib, assign])
+    except Exception:
+        pass
+
+    import_status = import_result_status(DIAGNOSTICS)
+    print_import_summary(import_status)
+    summary_printed = True
+    print("USD:", USD_PATH)
+    print("MATERIALS:", list(created.keys()))
+    print("MATERIAL STATS:", META.get("material_stats", {}))
+    print("EDITABLE SOP:", sopcreate.path())
+    print("MATERIAL LIBRARY:", matlib.path())
+    print("MATERIALX DIR:", MATERIALX_DIR)
+    print("INSTANCE MODE:", META.get("export_as_instances", False))
+    print("UDIM MODE:", META.get("udim_mode", False))
+    if import_status == "FAILED":
+        raise RuntimeError("B2H import failed; see the diagnostic summary above")
+except Exception as fatal_error:
+    if not DIAGNOSTICS["errors"] or str(fatal_error) not in DIAGNOSTICS["errors"]:
+        add_error("Fatal importer failure: %s" % fatal_error)
+    if not summary_printed:
+        print_import_summary("FAILED")
+    raise

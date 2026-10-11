@@ -1,0 +1,37 @@
+name: Bug report
+description: Report an import, material, assignment, or installer problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: input
+    id: houdini
+    attributes:
+      label: Houdini version
+      placeholder: "21.0.559"
+    validations:
+      required: true
+  - type: input
+    id: blender
+    attributes:
+      label: Blender and B2H Bridge versions
+      placeholder: "Blender 5.1 / B2H Bridge 4.8.1 Beta"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the panel status and Houdini console output.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Relevant manifest details
+      description: Remove private paths before posting files publicly.

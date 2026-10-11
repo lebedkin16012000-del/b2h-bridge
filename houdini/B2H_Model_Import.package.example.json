@@ -1,0 +1,8 @@
+{
+  "enable": true,
+  "env": [
+    {"B2H_ASSET_LIBRARY_ROOT": "C:/PATH/TO/B2H_Model_Import"},
+    {"PYTHONPATH": "C:/PATH/TO/B2H_Model_Import/python"}
+  ],
+  "path": "C:/PATH/TO/B2H_Model_Import"
+}

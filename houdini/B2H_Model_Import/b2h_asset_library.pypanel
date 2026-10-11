@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pythonPanelDocument>
+  <interface name="b2h_asset_library" label="B2H Model Import v0.5.0" icon="MISC_python" help_url="b2h:asset_library">
+    <script><![CDATA[
+import importlib
+
+# The Houdini package adds B2H_Asset_Library/python to PYTHONPATH.
+# Keeping filesystem paths out of the panel makes it portable between users.
+import b2h_asset_library_ui
+importlib.reload(b2h_asset_library_ui)
+
+def onCreateInterface():
+    return b2h_asset_library_ui.createInterface()
+]]></script>
+    <includeInToolbarMenu menu_position="202" create_separator="false"/>
+    <help><![CDATA[B2H Model Import v0.5.0 validates and updates Blender B2H Bridge exports in Houdini Solaris.]]></help>
+  </interface>
+</pythonPanelDocument>

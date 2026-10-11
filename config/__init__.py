@@ -8,7 +8,7 @@ from typing import Dict, Any, Set
 
 # Константы
 # Relative to the current .blend file; no user-specific export path is embedded.
-DEFAULT_EXPORT_DIR = "//B2H_Exports"
+DEFAULT_EXPORT_DIR = os.path.join(os.path.expanduser("~"), "Documents", "B2H_Exports")
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff", ".bmp", ".tga"}
 
 # Классификация узлов для анализа материалов

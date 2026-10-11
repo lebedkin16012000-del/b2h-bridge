@@ -1,62 +1,57 @@
-# B2H Bridge v4.0.0 Beta
+# B2H Bridge — Blender → Houdini
 
-> **Beta / Work In Progress** — please test the add-on on a copy of production assets before relying on it in a production pipeline.
+**Blender: 4.8.3 Beta · Houdini Model Import: 0.5.0**
 
-B2H Bridge is a Blender add-on for preparing Blender assets for Houdini look-development workflows. It exports USD geometry, creates portable PBR textures when needed, writes MaterialX data, and generates a Houdini Python import script.
+Экспорт моделей и PBR-материалов из Blender в Houdini Solaris / Karma через USD.
 
-## Supported versions
+## Скачать
 
-- Blender **5.1**
-- Houdini **21.0.559**
+- [B2H Bridge 4.8.3 Beta для Blender](downloads/B2H_Bridge-4.8.3-Beta.zip?raw=true)
+- [B2H Model Import 0.5.0 для Houdini](downloads/B2H_Model_Import_Houdini_0.5.0.zip?raw=true)
 
-## What it does
+## Что нового по сравнению с опубликованной 4.0.0 Beta
 
-- Analyses Blender material graphs and preserves straightforward PBR texture connections.
-- Bakes complex, procedural, alpha, and normal-map channels when required.
-- Deduplicates and cleans up exported texture sets.
-- Exports USD geometry with material assignments.
-- Generates MaterialX files and a Houdini Python importer for Karma-oriented workflows.
-- Creates debug files for assignments, bake activity, and the complete exported material/texture summary.
+- Экспорт и запекание в отдельном процессе Blender: интерфейс остаётся доступным, есть прогресс и отмена.
+- Расширена обработка сложных материалов: вложенные группы, Mix Shader, Add Shader, карты IOR и transmission.
+- Повторное использование материалов и одинаковых текстур уменьшает количество дублей.
+- Локальный кэш запекания, читаемые имена текстур и переносимые папки экспорта.
+- Добавлена настройка запекания 3D-процедурных материалов на всю площадь UV-тайла.
+- Отдельная панель Houdini проверяет экспорт, собирает MaterialX и назначает материалы по точным путям USD.
+- Повторный импорт обновляет сеть этого ассета; при ошибке замены старые узлы сохраняются.
 
-## Quick start
+## Установка и использование
 
-1. Download the release ZIP and extract it.
-2. Copy the extracted `B2H_Bridge` folder to Blender's add-ons folder:
-   `%APPDATA%\Blender Foundation\Blender\5.1\scripts\addons\`.
-3. In Blender open **Edit → Preferences → Add-ons** and enable **B2H Bridge v4.0.0 Beta**.
-4. Open the scene containing the mesh asset and its materials.
-5. In the 3D Viewport press `N`, open the **Houdini** tab, and configure the export folder and asset name.
-6. Select the desired bake, material, and Houdini options, then click **Export Stable PBR Bridge**.
-7. After a successful export, open `COPY_THIS_TO_HOUDINI.txt` from the export folder.
-8. Copy its generated Python command into Houdini's **Python Shell** and execute it.
-9. Inspect the imported geometry, material assignments, MaterialX networks, and texture paths in Houdini.
+**Blender**
+1. Скачайте ZIP аддона. В Blender откройте **Edit → Preferences → Add-ons → Install from Disk** и выберите архив.
+2. Включите **B2H Bridge v4.8.3 Beta**.
+3. В 3D Viewport нажмите **N**, откройте вкладку **Houdini**, задайте папку экспорта и имя ассета.
+4. Для моделей с несколькими материалами оставьте **Split Meshes By Material** включённым и запустите экспорт.
 
-## Export output
+**Houdini на Windows**
+1. Распакуйте ZIP импортера и запустите **install_windows.bat**.
+2. Перезапустите Houdini и откройте Python Panel **B2H Model Import v0.5.0**.
+3. Выберите папку экспорта, найдите ассет и импортируйте его.
+4. Другой способ: выполните в Python Shell команду из **COPY_THIS_TO_HOUDINI.txt**, созданного экспортёром.
 
-An export folder normally contains:
+Подробная инструкция: [Houdini — README_RU](houdini/README_RU.md).
 
-- `<asset>.usd` or `<asset>.usdc` — geometry export
-- `textures/` — copied or baked PBR textures
-- `materialx/` — MaterialX files and manifest
-- `import_to_houdini.py` — generated Houdini importer
-- `COPY_THIS_TO_HOUDINI.txt` — the command to paste into Houdini's Python Shell
-- `<asset>_export_report.txt` — readable material, texture, bake, and script-path report
-- `<asset>_assignment_debug.json` — material assignment diagnostics
-- `<asset>_bridge.json` — bridge metadata consumed by the importer
+## Версии и ограничения
 
-## Installation notes
+- В коде аддона указан минимум Blender 5.0; импорт ориентирован на Houdini 21.0.559.
+- Это beta. Проверены целостность архивов, синтаксис Python, JSON/XML и контрольные суммы импортера. Полный экспорт и рендер в Blender/Houdini при этой публикации не запускались.
+- UDIM пока представлен только метаданными, без полноценного запекания тайлов.
+- Разделение по материалам очищает анимацию объектов на экспортных копиях; анимированные модели требуют отдельной проверки.
+- Известная особенность импортера: при подключённой карте displacement значение масштаба 0 заменяется на 0.01.
+- Исходные ZIP опубликованы без изменения кода.
 
-This is a folder-based Blender add-on. Keep the `B2H_Bridge` folder intact; do not install an individual Python file. The add-on requires Blender's bundled `bpy` module and is therefore not intended to run as a standalone Python program.
+## Исходники
 
-## Development and reporting issues
+Код Blender находится в корне репозитория, код и установщик Houdini — в [houdini/](houdini/). Для установки используйте ZIP выше.
 
-Please attach the generated `<asset>_export_report.txt`, `<asset>_bake_report.txt`, and `<asset>_assignment_debug.json` when reporting an export issue.
-
-## Contacts
+## Контакты
 
 - Telegram: [@Neo_Lesha](https://t.me/Neo_Lesha)
-- Email: [lebedkin16012000@gmail.com](mailto:lebedkin16012000@gmail.com)
-- Telegram channel: [houdini_closet](https://t.me/houdini_closet)
-## License
+- Email: lebedkin16012000@gmail.com
+- Канал: [houdini_closet](https://t.me/houdini_closet)
 
-B2H Bridge v4.0.0 Beta is released under the [MIT License](LICENSE).
+[MIT License](LICENSE)

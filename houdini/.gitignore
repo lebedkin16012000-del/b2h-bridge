@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.hip
+*.hiplc
+*.hipnc
+*.log
+*.zip
+*.sha256
+.DS_Store
+Thumbs.db

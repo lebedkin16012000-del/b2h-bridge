@@ -1,5 +1,5 @@
 """
-B2H Bridge v4.0.0 Beta
+B2H Bridge v4.8.3 Beta
 Модульная версия аддона
 """
 
@@ -24,13 +24,13 @@ def reload_modules():
     importlib.reload(ui)
 
 bl_info = {
-    "name": "B2H Bridge v4.0.0 Beta",
+    "name": "B2H Bridge v4.8.3 Beta",
     "author": "NEO_LESHA",
-    "version": (4, 0, 0),
+    "version": (4, 8, 3),
     "warning": "Beta / Work In Progress",
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Houdini Bridge",
-    "description": "B2H Bridge v4.0.0 Beta: USD, PBR textures, partial bake, and Houdini MaterialX import",
+    "description": "B2H Bridge v4.8.3 Beta: optional full-tile projection for 3D materials",
     "category": "Import-Export",
 }
 
@@ -38,6 +38,7 @@ bl_info = {
 classes = (
     ui.BTH_Settings,
     ui.BTH_OT_export,
+    ui.BTH_OT_cancel_export,
     ui.BTH_PT_panel,
 )
 
@@ -55,10 +56,17 @@ def register():
 
     # Регистрация свойств сцены
     bpy.types.Scene.bth_settings = bpy.props.PointerProperty(type=ui.BTH_Settings)
+    bpy.types.Material.bth_export_name = bpy.props.StringProperty(
+        name="B2H Export Name",
+        description="Короткое имя материала и его публичных текстур, например stone",
+        default="",
+    )
 
     print(f"B2H Bridge V{bl_info['version']} зарегистрирован")
 
 def unregister():
+    from .jobs.operator import shutdown
+    shutdown()
     """Отмена регистрации аддона в Blender"""
     try:
         bpy.app.translations.unregister(__name__)
@@ -68,6 +76,8 @@ def unregister():
     # Удаление свойств сцены
     if hasattr(bpy.types.Scene, "bth_settings"):
         del bpy.types.Scene.bth_settings
+    if hasattr(bpy.types.Material, "bth_export_name"):
+        del bpy.types.Material.bth_export_name
 
     # Отмена регистрации классов
     for cls in reversed(classes):
