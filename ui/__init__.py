@@ -14,8 +14,8 @@ from ..baking import bake_manager
 from ..export import export_manager
 
 
-RELEASE_NAME = "B2H Bridge v4.8.3 Beta"
-RELEASE_VERSION = "4.8.3-beta"
+RELEASE_NAME = "B2H Bridge v4.8.4 Beta"
+RELEASE_VERSION = "4.8.4-beta"
 
 
 from .settings import BTH_Settings

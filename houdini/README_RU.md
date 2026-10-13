@@ -1,34 +1,34 @@
 # B2H Model Import 0.5.0
 
-Расширение Houdini 21 для импорта моделей, материалов и текстур,
-экспортированных из Blender через **B2H Bridge 4.8.1 Beta** или новее.
+Houdini 21 importer for models, materials, and textures exported from Blender
+with **B2H Bridge 4.8.1 Beta** or newer.
 
-## Возможности
+## Features
 
-- импорт USD в Solaris с редактируемой SOP-сетью;
-- Karma MaterialX для Base Color, AO, Roughness, Metallic, Normal, Opacity,
-  Emission, Transmission, IOR и Displacement;
-- точные назначения материалов по USD-примам;
-- повторный импорт без размножения нод;
-- сохранение предыдущего рабочего импорта, если обновление завершилось ошибкой;
-- проверка манифеста и понятные статусы импорта;
-- фоновое сканирование библиотеки и индикатор прогресса.
+- Editable USD geometry import into Solaris.
+- Karma MaterialX networks for Base Color, AO, Roughness, Metallic, Normal,
+  Opacity, Emission, Transmission, IOR, and Displacement.
+- Exact material bindings resolved from USD primitive paths.
+- Idempotent updates by stable asset identity.
+- Transactional replacement that preserves the previous working import when
+  an update fails.
+- Schema validation, explicit diagnostics, background scans, and progress UI.
 
-## Быстрая установка на Windows
+## Windows installation
 
-1. Распакуйте архив полностью.
-2. Закройте Houdini.
-3. Запустите `install_windows.bat`.
-4. Перезапустите Houdini.
-5. Откройте **Windows → New Pane Tab Type → B2H Model Import v0.5.0**.
+1. Extract the entire release archive.
+2. Close Houdini.
+3. Run `install_windows.bat`.
+4. Restart Houdini.
+5. Open **Windows → New Pane Tab Type → B2H Model Import v0.5.0**.
 
-Установщик находит **все версии Houdini** в обычных `Documents`, в OneDrive
-и в `Program Files`. Package-файл и Python Panel устанавливаются для каждой
-найденной версии. Общие файлы программы устанавливаются один раз в:
+The installer detects **all Houdini versions** from Documents, OneDrive, and
+Program Files. It configures the package and Python Panel for every detected
+version while installing the shared application files only once under:
 
 `%LOCALAPPDATA%\B2H\ModelImport\0.5.0`
 
-Если папки не определились автоматически, можно передать одну или несколько:
+To select one or more Houdini user folders explicitly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install_windows.ps1 `
@@ -36,44 +36,43 @@ powershell -ExecutionPolicy Bypass -File .\install_windows.ps1 `
                   "C:\Users\USERNAME\Documents\houdini21.0"
 ```
 
-Установщик сохраняет заменяемые package/pypanel-файлы в папке `b2h_backup`
-внутри каждой пользовательской папки Houdini.
+For manual installation, copy `B2H_Model_Import` to a permanent directory,
+copy its `.pypanel` file into the Houdini `python_panels` directory, and edit
+`B2H_Model_Import.package.example.json` with the permanent path before placing
+it in the Houdini `packages` directory.
 
-## Ручная установка
+## Using the importer
 
-1. Скопируйте папку `B2H_Model_Import` в постоянное место.
-2. Скопируйте `b2h_asset_library.pypanel` в
-   `<houdini user dir>/python_panels`.
-3. Скопируйте `B2H_Model_Import.package.example.json` в
-   `<houdini user dir>/packages/B2H_Model_Import.json`.
-4. Замените `C:/PATH/TO/B2H_Model_Import` на реальный путь.
-5. Перезапустите Houdini.
+1. Export a prepared model from Blender with B2H Bridge.
+2. Keep **Split Meshes By Material** enabled for meshes with multiple materials.
+3. Click **Select Export Folder** and choose the folder containing the exported bridge JSON.
+4. Click **Refresh**, select the asset, then click **Import / Update Selected**.
 
-## Использование
+Reimporting the same `asset_id` updates only its B2H-owned nodes. User-created nodes in `/stage` are not removed. Check geometry, materials and a test render after importing.
 
-1. В Blender экспортируйте модель через B2H Bridge.
-2. Для объектов с несколькими материалами оставьте включённым
-   **Split Meshes By Material**.
-3. В Houdini выберите папку экспорта и нажмите **Refresh**.
-4. Выберите ассет и нажмите **Import / Update Selected**.
+## Installation backups
 
-Повторный импорт ассета с тем же `asset_id` обновляет только принадлежащие ему
-B2H-ноды. Пользовательские ноды в `/stage` не удаляются.
+The installer backs up replaced package and panel files in `b2h_backup` inside each Houdini user directory.
 
-## Совместимость
+## Developer validation
 
-- протестировано: Houdini 21.0.559;
-- регрессионные тесты Blender пройдены в Blender 5.1;
-- формат манифеста: B2H schema v1;
-- ОС установщика: Windows 10/11.
-
-## Проверка для разработчиков
+Run the included regression script with Houdini's Python interpreter:
 
 ```powershell
 & "C:\Program Files\Side Effects Software\Houdini 21.0.559\bin\hython.exe" `
   .\tests\test_houdini_import.py
 ```
 
-## Лицензия
+## Requirements and compatibility
 
-MIT. См. `LICENSE`.
+- Tested with Houdini 21.0.559.
+- Blender regression suite passed with Blender 5.1.
+- B2H Bridge manifest schema v1.
+- Windows 10/11 installer.
+
+Keep **Split Meshes By Material** enabled in Blender for meshes with multiple
+materials. This gives the importer an exact USD primitive for every binding.
+
+## License
+
+MIT. See `LICENSE`.

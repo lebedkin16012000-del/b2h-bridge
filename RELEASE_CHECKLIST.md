@@ -1,4 +1,4 @@
-# Release checklist — B2H Bridge v4.0.0 Beta
+# Release checklist — B2H Bridge v4.8.4 Beta
 
 Use this checklist before publishing a release or sharing a build.
 

@@ -16,7 +16,7 @@ from ..utils import safe_name, clean_material_name, copy_or_save_image
 
 MANIFEST_SCHEMA_VERSION = 1
 GENERATOR_NAME = 'B2H Bridge'
-GENERATOR_VERSION = '4.8.3-beta'
+GENERATOR_VERSION = '4.8.4-beta'
 
 def asset_identity(export_dir, asset, requested_id=''):
     """Resolve identity from the last successfully published manifest.
@@ -228,6 +228,70 @@ def write_json(path, value):
     temp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf8')
     os.replace(temp, path)
 
+def plain_uv_image(node, obj=None):
+    if node.type != 'TEX_IMAGE' or not node.image or node.projection != 'FLAT':
+        return False
+    if node.image.source not in {'FILE', 'GENERATED'}:
+        return False
+    vector = node.inputs['Vector']
+    if not vector.is_linked:
+        return True
+    socket = vector.links[0].from_socket
+    while socket.node.type == 'REROUTE' and socket.node.inputs[0].is_linked:
+        socket = socket.node.inputs[0].links[0].from_socket
+    if socket.node.type == 'TEX_COORD' and socket.identifier == 'UV':
+        return True
+    if socket.node.type == 'UVMAP' and obj is not None:
+        active = next((u.name for u in obj.data.uv_layers if u.active_render), None)
+        return not socket.node.from_instancer and socket.node.uv_map in {'', active}
+    return False
+
+
+def direct_source(value, role, obj=None):
+    if not linked(value): return None
+    while value.node.type == 'REROUTE' and value.node.inputs[0].is_linked:
+        value = value.node.inputs[0].links[0].from_socket
+    component = None
+    if value.node.type in {'SEPRGB', 'SEPARATE_COLOR'}:
+        node = value.node
+        if role == 'basecolor' or (node.type == 'SEPARATE_COLOR' and node.mode != 'RGB'):
+            return None
+        component = list(node.outputs).index(value)
+        if component > 2 or not node.inputs[0].is_linked: return None
+        value = node.inputs[0].links[0].from_socket
+    node = value.node
+    if not plain_uv_image(node, obj): return None
+    if role == 'basecolor':
+        return (node.image, None) if value.identifier == 'Color' else None
+    if role not in {'roughness', 'metallic', 'opacity', 'ior', 'transmission'}:
+        return None
+    if value.identifier == 'Alpha': component = 3
+    elif value.identifier != 'Color': return None
+    elif component is None: component = 'luminance'
+    return node.image, component
+
+
+def save_direct_scalar(image, component, path):
+    # Extract image channels without rendering the material or altering its UVs.
+    import numpy as np
+    pixels = np.empty(len(image.pixels), dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    pixels = pixels.reshape((-1, image.channels))
+    values = pixels[:, :3] @ np.array([.2126, .7152, .0722], dtype=np.float32) if component == 'luminance' else pixels[:, component]
+    rgba_pixels = np.ones((len(values), 4), dtype=np.float32)
+    rgba_pixels[:, :3] = values[:, None]
+    out = bpy.data.images.new('_B2H_channel', width=image.size[0], height=image.size[1], alpha=True, float_buffer=True)
+    try:
+        out.colorspace_settings.name = 'Non-Color'
+        out.pixels.foreach_set(rgba_pixels.ravel())
+        out.file_format = 'PNG'
+        out.filepath_raw = str(path)
+        out.save()
+    finally:
+        bpy.data.images.remove(out)
+    return str(path)
+
+
 def direct_image(value, role):
     """Only transfer a plain default UV image, never discard Mapping/channel selection."""
     if not linked(value): return None
@@ -238,21 +302,21 @@ def direct_image(value, role):
     if node.image.source not in {'FILE', 'GENERATED'}: return None
     return node.image
 
-def direct_normal(compiler):
+def direct_normal(compiler, obj=None):
     if compiler.surface.node.type != 'BSDF_PRINCIPLED': return None
     source = compiler.surface.node.inputs.get('Normal')
     if not source or not source.is_linked: return None
     node = source.links[0].from_node
-    if node.type != 'NORMAL_MAP' or node.space != 'TANGENT' or node.uv_map: return None
+    if node.type != 'NORMAL_MAP' or node.space != 'TANGENT': return None
+    if node.uv_map and (obj is None or node.uv_map != next((u.name for u in obj.data.uv_layers if u.active_render), None)): return None
     if node.inputs['Strength'].is_linked or node.inputs['Strength'].default_value != 1: return None
     source = node.inputs['Color']
     if not source.is_linked: return None
     image_node = source.links[0].from_node
-    if image_node.type != 'TEX_IMAGE' or image_node.inputs['Vector'].is_linked: return None
+    if not plain_uv_image(image_node, obj): return None
     image = image_node.image
-    if not image or image.source != 'FILE' or not image.colorspace_settings.is_data: return None
+    if not image or not image.colorspace_settings.is_data: return None
     if source.links[0].from_socket.identifier != 'Color': return None
-    if image_node.projection != 'FLAT' or image.packed_file: return None
     return image
 
 def publish(stage, destination, clean_roots=()):
@@ -369,7 +433,16 @@ def run(settings, object_names, job_dir, source_key, status):
         try:
             values = {role: compiler.compile(role) for role in CHANNELS}
             nodes = list(compiler.nodes())
-            has_normal = any(n.type in {'BUMP','NORMAL_MAP','BEVEL'} for n in nodes)
+            reachable = set()
+            def visit(node):
+                if node in reachable: return
+                reachable.add(node)
+                for socket in node.inputs:
+                    for link in socket.links: visit(link.from_node)
+            visit(compiler.output)
+            has_normal = any(n.type in {'BUMP','NORMAL_MAP','BEVEL'} for n in reachable)
+            if any(n.type == 'GROUP' for n in reachable):
+                has_normal = has_normal or any(n.type in {'BUMP','NORMAL_MAP','BEVEL'} for n in nodes)
             textures = {}
             defaults = {'base_color':list(rgba(values['basecolor'])) if not linked(values['basecolor']) else [0.8,0.8,0.8,1],
                         'roughness':float(rgba(values['roughness'])[0]) if not linked(values['roughness']) else 0.5,
@@ -389,21 +462,27 @@ def run(settings, object_names, job_dir, source_key, status):
                 if 'emission' not in bake_roles: bake_roles.append('emission')
             elif not linked(values['emission']): defaults['emission_strength'] = 0.0
             direct = {}
-            if settings.fast_bake_mode:
+            if settings.fast_bake_mode or not settings.auto_bake_complex:
                 for role in list(bake_roles):
-                    image = direct_image(values[role], role)
-                    if image:
-                        direct[role] = image
+                    source_image = direct_source(values[role], role, obj)
+                    if source_image:
+                        direct[role] = source_image
+                        bake_roles.remove(role)
+                    elif (not settings.auto_bake_complex and not linked(values[role])
+                          and (role != 'emission' or max(rgba(values[role])[:3]) == 0)):
                         bake_roles.remove(role)
             if has_normal:
-                normal_image = direct_normal(compiler) if settings.fast_bake_mode else None
-                if normal_image: direct['normal'] = normal_image
+                normal_image = direct_normal(compiler, obj) if settings.fast_bake_mode or not settings.auto_bake_complex else None
+                if normal_image: direct['normal'] = (normal_image, None)
                 else: bake_roles.append('normal')
             if bake_roles and not settings.auto_bake_complex:
-                raise ValueError(f'{source.name}: requires baking; enable Bake Complex Materials')
-            prepare_uv(obj, settings.bake_auto_uv)
-            for role, image in direct.items():
-                path = copy_or_save_image(image, str(texture_dir), role)
+                raise ValueError(f'{source.name}: requires baking for {", ".join(bake_roles)}; enable Bake Complex Materials')
+            if bake_roles:
+                prepare_uv(obj, settings.bake_auto_uv)
+            for role, (image, component) in direct.items():
+                path = (save_direct_scalar(image, component, texture_dir/(public_stem+'_'+role+'.png'))
+                        if component is not None else copy_or_save_image(image, str(texture_dir), role))
+                logs.append(f'DIRECT {obj.name}/{source.name}: {role} from {image.name}')
                 if not path: raise RuntimeError(f'Could not export {image.name}')
                 # Avoid collisions between source images with identical filenames.
                 stable = texture_dir/(public_stem+'_'+role+Path(path).suffix.lower())

@@ -1,5 +1,5 @@
 """
-B2H Bridge v4.8.3 Beta
+B2H Bridge v4.8.4 Beta
 Модульная версия аддона
 """
 
@@ -24,13 +24,13 @@ def reload_modules():
     importlib.reload(ui)
 
 bl_info = {
-    "name": "B2H Bridge v4.8.3 Beta",
+    "name": "B2H Bridge v4.8.4 Beta",
     "author": "NEO_LESHA",
-    "version": (4, 8, 3),
+    "version": (4, 8, 4),
     "warning": "Beta / Work In Progress",
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Houdini Bridge",
-    "description": "B2H Bridge v4.8.3 Beta: optional full-tile projection for 3D materials",
+    "description": "B2H Bridge v4.8.4 Beta: optional full-tile projection for 3D materials",
     "category": "Import-Export",
 }
 

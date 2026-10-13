@@ -1,7 +1,7 @@
 import bpy, os, json
 from typing import Dict, Any
 from ..utils import norm, BakeLogger
-RELEASE_NAME = "B2H Bridge v4.8.3 Beta"
+RELEASE_NAME = "B2H Bridge v4.8.4 Beta"
 
 def asset_relpath(path: str, base_dir: str):
     if not path:

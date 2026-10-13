@@ -1,26 +1,37 @@
 # Changelog
 
-## 4.8.3 Beta + Houdini Model Import 0.5.0 — 12 октября 2026
+## 4.8.4 Beta — October 13, 2026
 
-Обновление с ранее опубликованной 4.0.0 Beta; промежуточные версии отдельно не перечислены.
+- Added direct transfer of supported ready-made PBR images with complex-material baking disabled.
+- Added RGB/Alpha channel extraction for scalar PBR maps.
+- Expanded direct UV-image and tangent-space normal-map recognition.
+- UV preparation now runs only when baking is required.
+- Normal detection ignores disconnected nodes in simple material graphs.
+- Baking-disabled errors now identify channels that require baking.
+- Updated repository documentation to English, including preparation and step-by-step instructions.
+
+## 4.8.3 Beta + Houdini Model Import 0.5.0 — October 12, 2026
+
+Update from the previously published 4.0.0 Beta; intermediate versions are not listed separately.
 
 ### Blender
-- Фоновый экспорт с прогрессом, оценкой времени и отменой.
-- Обработка вложенных групп, Mix/Add Shader, IOR и transmission.
-- Повторное использование материалов, устранение одинаковых текстур и локальный кэш.
-- Читаемые имена файлов и опция проекции 3D-материалов на весь UV-тайл.
-- Идентификатор ассета и номер ревизии в формате обмена schema 1.
+
+- Background export with progress, estimated time and cancellation.
+- Handling of nested groups, Mix/Add Shader, IOR and transmission.
+- Material reuse, identical-texture deduplication and local caching.
+- Readable texture names and optional projection across the full UV tile.
+- Asset identity and revision stored in manifest schema 1.
 
 ### Houdini
-- Отдельная панель библиотеки ассетов и установщик Windows.
-- Проверка формата экспорта и диагностика отсутствующих текстур.
-- Точные назначения материалов по путям USD.
-- Обновление ранее импортированного ассета без дублирования сети.
-- Сохранение предыдущих узлов при ошибке обновления.
-- Сборка MaterialX с PBR-картами, AO, normal, opacity, emission, transmission, IOR и displacement.
 
-ZIP опубликованы без изменения кода. Ограничения и статус проверки указаны в README.
+- Separate asset-library panel and Windows installer.
+- Export validation and missing-texture diagnostics.
+- Exact material assignments using USD paths.
+- Asset updates without duplicate networks.
+- Preservation of the previous nodes if an update fails.
+- MaterialX construction with PBR maps, AO, normal, opacity, emission, transmission, IOR and displacement.
 
+Installation ZIPs were published without code changes. See the README for limitations and validation status.
 
 ## B2H Bridge v4.0.0 Beta
 
