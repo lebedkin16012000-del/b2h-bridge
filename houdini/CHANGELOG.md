@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 — Primary UV restore fix
+
+- Fixed direct B2H import UV handling in Houdini Solaris.
+- Added `RESTORE_PRIMARY_UV` before SOP Create output.
+- When Houdini has a primary `uv` attribute, conflicting residual `st` is removed so SOP Create exports the correct `primvars:st`.
+- Existing `st` is preserved when no primary `uv` exists.
+- Additional UV sets are not removed.
+- Updated importer, panel and UI version metadata to 0.5.1.
+
 ## 0.5.0 — Stage 10: Unified Production Importer
 
 - Split active code into manifest, MaterialX, importer, facade and UI layers.
@@ -26,3 +35,4 @@
 - 0.4.8 — Stage 8: Honest Import Status
 - 0.4.9 — Stage 9: Responsive Panel
 - 0.5.0 — Stage 10: Unified Production Importer
+- 0.5.1 — Primary UV restore fix
