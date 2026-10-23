@@ -24,7 +24,7 @@ import b2h_library
 import b2h_settings as settings
 
 
-ADDON_VERSION = "0.5.0"
+ADDON_VERSION = "0.5.1"
 DEVELOPMENT_STAGE = 10
 STAGE_NAME = "Unified Production Importer"
 DISPLAY_NAME = "B2H Model Import v%s" % ADDON_VERSION
