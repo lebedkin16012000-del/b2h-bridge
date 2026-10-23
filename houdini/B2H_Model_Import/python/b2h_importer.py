@@ -10,7 +10,7 @@ from b2h_manifest import load_manifest, safe_name, validate_manifest
 from b2h_materials import build_material, setparm, settuple
 
 
-IMPORTER_VERSION = "0.5.0"
+IMPORTER_VERSION = "0.5.1"
 
 
 def _progress(callback, fraction, message):
@@ -124,6 +124,19 @@ def _create_geometry(stage, meta, asset_id, token):
         if not settuple(transform, ("r", "rot", "rotate"), (angle, 0.0, 0.0)):
             setparm(transform, "rx", angle)
         last = transform
+    # USD Import maps the primary st into Houdini uv. A residual st from
+    # another mesh can shadow uv when SOP Create exports the merged geometry.
+    uv_fix = create.createNode("python", "RESTORE_PRIMARY_UV")
+    uv_fix.setInput(0, last)
+    uv_fix.parm("python").set('''import hou
+geo = hou.pwd().geometry()
+uv = geo.findVertexAttrib("uv") or geo.findPointAttrib("uv")
+if uv is not None:
+    for attrib in (geo.findVertexAttrib("st"), geo.findPointAttrib("st")):
+        if attrib is not None:
+            attrib.destroy()
+''')
+    last = uv_fix
     output = create.createNode("null", "OUT_B2H_EDITABLE_USD")
     output.setInput(0, last)
     output.setDisplayFlag(True)
