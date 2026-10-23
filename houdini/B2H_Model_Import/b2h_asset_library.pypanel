@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <pythonPanelDocument>
-  <interface name="b2h_asset_library" label="B2H Model Import v0.5.0" icon="MISC_python" help_url="b2h:asset_library">
+  <interface name="b2h_asset_library" label="B2H Model Import v0.5.1" icon="MISC_python" help_url="b2h:asset_library">
     <script><![CDATA[
 import importlib
 
@@ -13,6 +13,6 @@ def onCreateInterface():
     return b2h_asset_library_ui.createInterface()
 ]]></script>
     <includeInToolbarMenu menu_position="202" create_separator="false"/>
-    <help><![CDATA[B2H Model Import v0.5.0 validates and updates Blender B2H Bridge exports in Houdini Solaris.]]></help>
+    <help><![CDATA[B2H Model Import v0.5.1 validates and updates Blender B2H Bridge exports in Houdini Solaris.]]></help>
   </interface>
 </pythonPanelDocument>
